@@ -87,7 +87,19 @@ export class ApiFailure extends Error {
   }
 }
 
+/** GitHub Pages build: read exported JSON files instead of calling a server. */
+export const STATIC_MODE = import.meta.env.VITE_STATIC_DATA === 'true';
+
 export async function api<T>(path: string, signal?: AbortSignal): Promise<Envelope<T>> {
+  if (STATIC_MODE) {
+    const { staticApi, NotFound } = await import('./static');
+    try {
+      return await staticApi<T>(path, signal);
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') throw e;
+      throw new ApiFailure(e instanceof NotFound ? 'غير موجود' : 'تعذر تحميل البيانات', e instanceof NotFound ? 404 : 0);
+    }
+  }
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/api/v1${path}`, { signal, headers: { Accept: 'application/json' } });

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { API_BASE } from '../api';
+import { API_BASE, STATIC_MODE } from '../api';
 import { Header, SectionTitle } from '../components/ui';
 import { setSetting, useSetting } from '../hooks';
 
@@ -46,12 +46,30 @@ const Code = ({ children }: { children: ReactNode }) => (
 );
 
 export function About() {
-  const base = API_BASE || window.location.origin;
+  const base = API_BASE || (STATIC_MODE ? 'https://<your-api-host>' : window.location.origin);
+  const dataBase = new URL('./data', window.location.href.split('#')[0]).href;
   return (
     <>
       <Header title="واجهة API للمطورين" back />
       <main className="space-y-3 px-3 text-sm leading-7">
-        <SectionTitle>Fixtures OnSAT API</SectionTitle>
+        {STATIC_MODE && (
+          <>
+            <SectionTitle>ملفات JSON الثابتة (GitHub Pages)</SectionTitle>
+            <p>
+              هذه النسخة مستضافة على GitHub Pages وتُحدَّث تلقائيًا كل 30 دقيقة تقريبًا. يمكن قراءة البيانات مباشرة من الملفات التالية (بدون فلاتر):
+            </p>
+            <Code>{`GET ${dataBase}/meta.json
+GET ${dataBase}/matches.json
+GET ${dataBase}/matches/{id}.json      # channels, kickoff -12h…+48h
+GET ${dataBase}/competitions.json
+GET ${dataBase}/teams.json
+GET ${dataBase}/satellites.json
+GET ${dataBase}/satellites/{id}.json
+GET ${dataBase}/feeds.json`}</Code>
+            <p className="text-muted">للفلاتر والمناطق الزمنية والنتائج الفورية، شغّل واجهة REST الكاملة (Node) كما في ملف README.</p>
+          </>
+        )}
+        <SectionTitle>Fixtures OnSAT REST API</SectionTitle>
         <p>
           كل البيانات في هذا الموقع متاحة عبر واجهة REST مستقلة يمكن استخدامها في أي تطبيق (مثل مشغل IPTV). الاستجابات بصيغة JSON موحّدة، والتوقيت بصيغة UTC
           مع دعم المنطقة الزمنية عبر <code>tz</code>.

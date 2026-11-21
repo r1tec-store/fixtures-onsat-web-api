@@ -4,7 +4,7 @@ A web reconstruction of the **Fixtures ONSAT** Android app (`on.sat.fixtures` 2.
 provider-agnostic **REST API** for football fixtures, live status/scores and **satellite broadcast channels**
 (frequency, polarization, symbol rate, encryption). Any app can use it, for example an IPTV player.
 
-- **Website:** React + Vite + Tailwind, Arabic RTL, light/dark, mobile → desktop.
+- **Website:** https://r1tec-store.github.io/fixtures-onsat-web-api/ — React + Vite + Tailwind, Arabic RTL, light/dark, mobile → desktop.
 - **API:** Node + Express + TypeScript, `/api/v1`, OpenAPI 3 + Swagger UI at `/docs`.
 - **Data:** the public pages the app's WebView loads (`fixturessat.blogspot.com`), normalized. Live scores come from ESPN's public scoreboard.
   See [docs/REVERSE_ENGINEERING_REPORT.md](docs/REVERSE_ENGINEERING_REPORT.md) for how this was found and verified.
@@ -74,14 +74,35 @@ Everything is set through environment variables. See [.env.example](.env.example
 | `VITE_API_BASE_URL` | (same origin) | build-time, only when the site is hosted apart from the API |
 
 ## Deployment
-GitHub hosts the code. **GitHub Pages cannot run the Node API**, so deploy the API (which also serves the site) to a Node host:
 
-1. **Render (recommended, free tier):** New → *Blueprint* → select this repo. `render.yaml` builds the Dockerfile,
+### GitHub Pages (website, no server needed)
+**Live site:** https://r1tec-store.github.io/fixtures-onsat-web-api/
+
+GitHub Pages cannot run Node, so `.github/workflows/pages.yml` does the sync inside GitHub Actions instead.
+On every push and **every 30 minutes** it builds the site in static-data mode (`VITE_STATIC_DATA=true`), runs
+`backend/scripts/export-static.ts` against the real sources, and deploys. The normalized data is also published
+as plain JSON that any app can read (no filters, no API key):
+
+| File | Content |
+|---|---|
+| `/data/meta.json` | export time, counts, recent source issues |
+| `/data/matches.json` | every match (status/score as of the export) |
+| `/data/matches/<id>.json` | match + channels, for kickoffs −12 h … +48 h |
+| `/data/competitions.json`, `/data/teams.json`, `/data/feeds.json` | catalogs |
+| `/data/satellites.json`, `/data/satellites/<id>.json` | satellites and their channels |
+
+Limits of the Pages version: data is up to ~30 min old (GitHub may delay scheduled runs), there are no server-side
+filters, and GitHub pauses scheduled workflows in repos with no activity for 60 days (re-enable them in the Actions tab).
+
+### Full REST API (Node host)
+For live scores, filters, timezones and `/docs`, deploy the API (it serves the website too):
+
+1. **Render (free tier):** New → *Blueprint* → select this repo. `render.yaml` builds the Dockerfile,
    sets `/health` as the health check and auto-deploys on every push to `main`. You get HTTPS at `https://<name>.onrender.com`.
-   Set `PUBLIC_BASE_URL` to that URL. Free instances sleep when idle and lose `DATA_DIR` on restart; add a paid disk to keep the snapshot.
-2. **Railway / Fly.io:** both build the same `Dockerfile` (expose port 8080, health check `/health`).
-3. **Optional GitHub Pages site:** set the repository variable `API_BASE_URL` to your API URL. The `pages.yml` workflow then
-   publishes the website to `https://<user>.github.io/fixtures-onsat-web-api/`, and the site calls the API through CORS.
+   Set `PUBLIC_BASE_URL` to that URL. Free instances sleep when idle and lose `DATA_DIR` on restart.
+2. **Railway / Fly.io:** both build the same `Dockerfile` (port 8080, health check `/health`).
+3. Optionally set the repository variable `API_BASE_URL` to that API. The GitHub Pages site then calls the live API
+   instead of static files.
 
 Monitoring: `/health` for uptime checks, `/api/v1/status` for sync age and recent source errors, structured JSON logs (pino) on stdout,
 and the daily *Source health check* workflow, which fails when the upstream HTML changes.

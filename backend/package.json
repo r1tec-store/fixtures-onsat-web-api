@@ -10,7 +10,8 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "check:source": "tsx scripts/check-source.ts"
+    "check:source": "tsx scripts/check-source.ts",
+    "export:static": "tsx scripts/export-static.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
