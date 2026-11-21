@@ -1,0 +1,11 @@
+node_modules/
+dist/
+data/
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+*.apk
+*.xapk
+.DS_Store
