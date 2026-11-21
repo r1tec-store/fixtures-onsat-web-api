@@ -29,6 +29,8 @@ export const config = {
   userAgent: process.env.SOURCE_USER_AGENT ?? 'fixtures-onsat-web-api/1.0',
   requestTimeoutMs: num('SOURCE_TIMEOUT_MS', 15000),
   sourceConcurrency: Math.max(1, num('SOURCE_CONCURRENCY', 4)),
+  /** Pause before every upstream request (politeness / shared-IP rate limits, e.g. CI runners). */
+  requestDelayMs: num('SOURCE_DELAY_MS', 0),
 
   /** Schedule (today + next days) refresh interval. */
   scheduleRefreshMin: num('SCHEDULE_REFRESH_MINUTES', 10),

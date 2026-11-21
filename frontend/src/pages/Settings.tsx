@@ -60,7 +60,7 @@ export function About() {
             </p>
             <Code>{`GET ${dataBase}/meta.json
 GET ${dataBase}/matches.json
-GET ${dataBase}/matches/{id}.json      # channels, kickoff -12h…+48h
+GET ${dataBase}/matches/{id}.json      # channels, kickoff -3h…+30h
 GET ${dataBase}/competitions.json
 GET ${dataBase}/teams.json
 GET ${dataBase}/satellites.json

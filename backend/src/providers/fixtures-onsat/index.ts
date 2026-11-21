@@ -61,7 +61,7 @@ export class FixturesOnsatProvider implements FixturesProvider {
       const base = r.item;
       if (!r.ok) {
         this.report(`/p/${base.id}.html: ${String(r.error)}`);
-        return { ...base, season: null, fixtures: [] };
+        return { ...base, season: null, fixtures: [], fetchFailed: true };
       }
       // The index card name/logo is the canonical display (page heroes vary).
       return { ...r.value, id: base.id, name: base.name, logo: base.logo ?? r.value.logo, category: base.category };
@@ -73,7 +73,7 @@ export class FixturesOnsatProvider implements FixturesProvider {
     const results = await mapLimit(index, config.sourceConcurrency, (s) => this.page(`/p/${s.id}.html`, parseSatellitePage));
     return results.map((r) => {
       if (!r.ok) this.report(`/p/${r.item.id}.html: ${String(r.error)}`);
-      return { ...r.item, channels: r.ok ? r.value : [] };
+      return r.ok ? { ...r.item, channels: r.value } : { ...r.item, channels: [], fetchFailed: true };
     });
   }
 

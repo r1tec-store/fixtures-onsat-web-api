@@ -49,9 +49,32 @@ jobs:
         env:
           VITE_STATIC_DATA: "true"
 
+      # Snapshot of the last successful sync, carried between runs: the source
+      # rate-limits shared runner IPs, so the catalog is only re-fetched every
+      # few hours and pages that fail keep their last good data.
+      - name: Restore sync snapshot
+        if: vars.API_BASE_URL == ''
+        uses: actions/cache/restore@v4
+        with:
+          path: backend/data
+          key: pages-snapshot-${{ github.run_id }}
+          restore-keys: pages-snapshot-
+
       - name: Export data from the original sources
         if: vars.API_BASE_URL == ''
         run: npm run export:static -w backend -- ../frontend/dist/data
+        env:
+          DATA_DIR: ./data
+          SOURCE_CONCURRENCY: "2"
+          SOURCE_DELAY_MS: "400"
+          CATALOG_REFRESH_MINUTES: "360"
+
+      - name: Save sync snapshot
+        if: vars.API_BASE_URL == ''
+        uses: actions/cache/save@v4
+        with:
+          path: backend/data
+          key: pages-snapshot-${{ github.run_id }}
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

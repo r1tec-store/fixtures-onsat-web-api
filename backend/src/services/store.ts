@@ -36,6 +36,12 @@ export interface SyncIssue {
 
 const HOUR = 3600_000;
 
+/** Items whose page failed to load keep the previously synced version (if any). */
+function keepPrevious<T extends { id: string; fetchFailed?: boolean }>(next: T[], prev: T[]): T[] {
+  const old = new Map(prev.map((p) => [p.id, p]));
+  return next.map((n) => (n.fetchFailed && old.has(n.id) ? old.get(n.id)! : n));
+}
+
 export class DataStore {
   private snap: Snapshot;
   private matches = new Map<string, BaseMatch>();
@@ -117,13 +123,25 @@ export class DataStore {
         this.provider.fetchSatellites(),
         this.provider.fetchFeeds(),
       ]);
-      if (competitions.status === 'fulfilled' && competitions.value.length) this.snap.competitions = competitions.value;
-      else this.issue('error', `competitions sync failed: ${competitions.status === 'rejected' ? String(competitions.reason) : 'empty'}`);
-      if (satellites.status === 'fulfilled' && satellites.value.length) this.snap.satellites = satellites.value;
-      else this.issue('error', `satellites sync failed: ${satellites.status === 'rejected' ? String(satellites.reason) : 'empty'}`);
+      let complete = true;
+      if (competitions.status === 'fulfilled' && competitions.value.length) {
+        this.snap.competitions = keepPrevious(competitions.value, this.snap.competitions);
+        complete &&= !competitions.value.some((c) => c.fetchFailed);
+      } else {
+        complete = false;
+        this.issue('error', `competitions sync failed: ${competitions.status === 'rejected' ? String(competitions.reason) : 'empty'}`);
+      }
+      if (satellites.status === 'fulfilled' && satellites.value.length) {
+        this.snap.satellites = keepPrevious(satellites.value, this.snap.satellites);
+        complete &&= !satellites.value.some((s) => s.fetchFailed);
+      } else {
+        complete = false;
+        this.issue('error', `satellites sync failed: ${satellites.status === 'rejected' ? String(satellites.reason) : 'empty'}`);
+      }
       if (feeds.status === 'fulfilled') this.snap.feeds = feeds.value;
       else this.issue('error', `feeds sync failed: ${String(feeds.reason)}`);
-      this.snap.catalogSyncedAt = new Date(this.now()).toISOString();
+      // Only a complete sync counts as fresh, so partial failures are retried on the next cycle.
+      if (complete) this.snap.catalogSyncedAt = new Date(this.now()).toISOString();
       this.rebuild();
       await this.saveSnapshot();
       logger.info({ competitions: this.snap.competitions.length, satellites: this.snap.satellites.length }, 'catalog synced');
@@ -142,7 +160,8 @@ export class DataStore {
     return config.dataDir ? path.resolve(config.dataDir, `snapshot-${this.provider.name}.json`) : null;
   }
 
-  private async loadSnapshot(): Promise<void> {
+  /** Load the last-known-good snapshot from DATA_DIR (called by init; public for one-shot exports). */
+  async loadSnapshot(): Promise<void> {
     const file = this.snapshotFile();
     if (!file) return;
     try {

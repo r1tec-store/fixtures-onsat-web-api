@@ -26,6 +26,8 @@ export interface RawCompetition {
   category: string | null;
   season: string | null;
   fixtures: RawFixture[];
+  /** The page could not be fetched; the store keeps the previously synced fixtures. */
+  fetchFailed?: boolean;
 }
 
 export interface RawSatellite {
@@ -33,6 +35,8 @@ export interface RawSatellite {
   name: string;
   region: string | null;
   channels: Channel[];
+  /** The page could not be fetched; the store keeps the previously synced channels. */
+  fetchFailed?: boolean;
 }
 
 export interface RawMatchDetails {
