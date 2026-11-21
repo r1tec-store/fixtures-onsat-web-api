@@ -1,0 +1,22 @@
+# Render Blueprint: one web service serving both the API and the website.
+# New -> Blueprint -> pick this repo. Auto-deploys on every push to main.
+services:
+  - type: web
+    name: fixtures-onsat-web-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SCHEDULE_REFRESH_MINUTES
+        value: "10"
+      - key: CATALOG_REFRESH_MINUTES
+        value: "180"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: API_KEYS
+        sync: false

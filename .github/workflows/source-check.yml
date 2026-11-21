@@ -1,0 +1,20 @@
+name: Source health check
+
+# Verifies daily that the original data sources still respond and still have
+# the HTML structure our parsers expect. A failure means the provider needs updating.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check:source

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t fixtures-onsat-web-api .
+      - name: Smoke test container
+        run: |
+          docker run -d --name api -p 8080:8080 -e DISABLE_SYNC=true fixtures-onsat-web-api
+          for i in $(seq 1 20); do curl -fs localhost:8080/health && break; sleep 1; done
+          curl -fs localhost:8080/openapi.json > /dev/null
+          curl -fs localhost:8080/ | grep -q '<div id="root">'
