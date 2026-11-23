@@ -4,7 +4,7 @@ import type { LiveScore, RawCompetition, RawFixture } from '../providers/types.j
 import { matchId, teamId } from '../utils/ids.js';
 
 /** A normalized fixture before time-dependent status/score is applied. */
-export interface BaseMatch extends Omit<Match, 'status' | 'status_source' | 'minute' | 'score'> {
+export interface BaseMatch extends Omit<Match, 'status' | 'status_source' | 'minute' | 'score' | 'espn_event_id'> {
   detail_path: string | null;
   score_ref: RawFixture['scoreRef'];
   final_score: { home: number; away: number } | null;
@@ -26,6 +26,7 @@ export function toBaseMatch(f: RawFixture, publicUrl: (p: string) => string): Ba
     detail_path: f.detailPath,
     score_ref: f.scoreRef,
     final_score: f.finalScore ?? null,
+    source_order: f.order ?? null,
   };
 }
 
@@ -57,7 +58,8 @@ const POSTPONED = new Set(['STATUS_POSTPONED', 'STATUS_DELAYED', 'STATUS_SUSPEND
 const CANCELLED = new Set(['STATUS_CANCELED', 'STATUS_CANCELLED', 'STATUS_ABANDONED', 'STATUS_FORFEIT']);
 
 export function applyStatus(m: BaseMatch, live: LiveScore | undefined, now: number, durationMs: number): Match {
-  const { detail_path: _d, score_ref: _s, final_score: finalScore, ...pub } = m;
+  const { detail_path: _d, score_ref: scoreRef, final_score: finalScore, ...rest } = m;
+  const pub = { ...rest, espn_event_id: scoreRef?.eventId ?? null };
   if (live) {
     let status: MatchStatus;
     if (POSTPONED.has(live.statusName)) status = 'postponed';

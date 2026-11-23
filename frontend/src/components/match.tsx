@@ -73,10 +73,16 @@ export function LeagueRow({ id, name, logo }: { id: string; name: string; logo: 
   );
 }
 
-/** Matches grouped under their competition header, in kickoff order. */
+const rank = (m: Match) => m.source_order ?? Number.POSITIVE_INFINITY;
+
+/**
+ * Matches grouped under their competition header, in the same order as the
+ * app's schedule (source_order); fixtures not on the schedule follow by kickoff.
+ */
 export function GroupedMatches({ matches }: { matches: Match[] }) {
   const groups: Array<{ key: string; comp: Match['competition']; items: Match[] }> = [];
-  for (const m of matches) {
+  const ordered = [...matches].sort((a, b) => rank(a) - rank(b) || a.kickoff.localeCompare(b.kickoff));
+  for (const m of ordered) {
     const key = m.competition?.id ?? '_';
     let g = groups.find((x) => x.key === key);
     if (!g) groups.push((g = { key, comp: m.competition, items: [] }));

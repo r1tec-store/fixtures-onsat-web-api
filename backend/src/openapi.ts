@@ -101,6 +101,8 @@ export function openApiSpec(serverUrl: string) {
             main_channel_logo: nullable({ type: 'string' }),
             has_details: { type: 'boolean' },
             source_url: nullable({ type: 'string', format: 'uri' }),
+            source_order: nullable({ type: 'integer', description: "Position in the source's daily schedule (the app's display order)" }),
+            espn_event_id: nullable({ type: 'string', description: 'ESPN event id for client-side live score polling' }),
           },
         },
         MatchDetails: {

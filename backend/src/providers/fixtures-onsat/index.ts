@@ -67,7 +67,7 @@ export class FixturesOnsatProvider implements FixturesProvider {
     const out: RawFixture[] = [];
     for (const r of rows) {
       const kickoff = r.kickoff ?? (r.detailPath ? this.kickoffs.get(r.detailPath) : undefined);
-      if (kickoff) out.push({ ...r, kickoff });
+      if (kickoff) out.push({ ...r, kickoff, order: out.length });
     }
     return out;
   }

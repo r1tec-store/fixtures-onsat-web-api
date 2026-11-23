@@ -19,6 +19,8 @@ export interface RawFixture {
   scoreRef: { league: string | null; eventId: string } | null;
   /** Final score printed by the source for finished matches (used when the score feed has none). */
   finalScore?: { home: number; away: number } | null;
+  /** Position on the source's schedule pages (display order), when listed there. */
+  order?: number | null;
 }
 
 export interface RawCompetition {

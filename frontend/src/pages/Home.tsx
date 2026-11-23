@@ -127,9 +127,14 @@ function FavoriteTeam() {
     <section>
       <SectionTitle
         action={
-          <button onClick={() => setPicking(true)} className="text-xs font-bold text-blue">
-            تغيير
-          </button>
+          <span className="flex items-center gap-3">
+            <button onClick={() => setPicking(true)} className="text-xs font-bold text-muted">
+              تغيير
+            </button>
+            <Link to={`/team/${favId}`} className="flex items-center gap-0.5 text-xs font-bold text-blue">
+              المزيد <Icon name="back" size={12} />
+            </Link>
+          </span>
         }
       >
         <span className="inline-flex items-center gap-2">

@@ -22,6 +22,9 @@ export interface Match {
   main_channel_logo: string | null;
   has_details: boolean;
   source_url: string | null;
+  /** Position in the app's daily schedule (display order). */
+  source_order?: number | null;
+  espn_event_id?: string | null;
 }
 export interface Channel {
   id: string;

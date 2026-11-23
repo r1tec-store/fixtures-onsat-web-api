@@ -50,6 +50,10 @@ export interface Match {
   main_channel_logo: string | null;
   has_details: boolean;
   source_url: string | null;
+  /** Position in the source's daily schedule (the app's display order); null for fixtures known only from league pages. */
+  source_order: number | null;
+  /** ESPN event id, so clients can poll live scores themselves (best effort). */
+  espn_event_id: string | null;
 }
 
 export interface Channel {

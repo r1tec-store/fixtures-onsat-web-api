@@ -88,3 +88,19 @@ describe('DataStore channel details', () => {
     expect(s.allMatches()[0]).toMatchObject({ status: 'finished', score: { home: 1, away: 3 } });
   });
 });
+
+describe('app display order', () => {
+  it('exposes the schedule position and ESPN id on each match', async () => {
+    config.dataDir = '';
+    const base = { home: { name: 'A', logo: null }, away: { name: 'B', logo: null }, competition: null, round: null, detailPath: null, mainChannelLogo: null };
+    const fixtures = [
+      { ...base, kickoff: '2026-11-23T20:00:00.000Z', scoreRef: { eventId: '77', league: null }, order: 0 },
+      { ...base, home: { name: 'C', logo: null }, kickoff: '2026-11-23T13:00:00.000Z', scoreRef: null, order: 1 },
+    ];
+    const s = new DataStore({ ...provider([], []), fetchSchedule: async () => fixtures }, null, () => Date.parse('2026-11-23T10:00:00Z'));
+    await s.syncSchedule();
+    const byHome = Object.fromEntries(s.allMatches().map((m) => [m.home_team.name, m]));
+    expect(byHome.A).toMatchObject({ source_order: 0, espn_event_id: '77' });
+    expect(byHome.C).toMatchObject({ source_order: 1, espn_event_id: null });
+  });
+});

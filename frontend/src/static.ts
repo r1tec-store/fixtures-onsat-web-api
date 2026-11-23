@@ -6,6 +6,7 @@
  * GitHub Action.
  */
 import type { Competition, Envelope, Match, MatchDetails, Team } from './api';
+import { liveOverlay } from './live';
 
 const DATA = './data';
 const MATCH_DURATION_MS = 120 * 60_000;
@@ -34,9 +35,9 @@ function load<T>(file: string, _signal?: AbortSignal): Promise<Envelope<T>> {
 function refresh<T extends Match>(m: T, now: number): T {
   const start = Date.parse(m.kickoff);
   if (m.status_source !== 'estimated' || m.score.home !== null) {
-    // A live-feed status is frozen at export time; exports can be hours apart, so
-    // don't keep showing "live" long after the match must have ended.
-    if ((m.status === 'live' || m.status === 'halftime') && now > start + MATCH_DURATION_MS + 60 * 60_000) return { ...m, status: 'finished', minute: null };
+    // A live-feed status is frozen at export time; exports can be hours apart. Like the
+    // app, treat a match as over 120 min after kickoff (the live overlay corrects it when ESPN knows better).
+    if ((m.status === 'live' || m.status === 'halftime') && now >= start + MATCH_DURATION_MS) return { ...m, status: 'finished', minute: null };
     if (m.status !== 'upcoming' || now < start) return m;
     // "upcoming" frozen at export but kickoff has passed: fall back to the clock estimate.
   }
@@ -69,7 +70,8 @@ export async function staticApi<T>(path: string, signal?: AbortSignal): Promise<
 
   const matches = async () => {
     const env = await load<Match[]>('matches.json', signal);
-    return { env, list: env.data.map((m) => refresh(m, now)).filter((m) => !statuses || statuses.includes(m.status)) };
+    const live = await liveOverlay(env.data, now);
+    return { env, list: env.data.map((m) => live(refresh(m, now))).filter((m) => !statuses || statuses.includes(m.status)) };
   };
 
   if (seg[0] === 'matches' && seg[1] === 'date' && seg[2]) {
@@ -79,7 +81,8 @@ export async function staticApi<T>(path: string, signal?: AbortSignal): Promise<
   if (seg[0] === 'matches' && seg[1]) {
     try {
       const env = await load<MatchDetails>(`matches/${seg[1]}.json`, signal);
-      return { ...env, data: refresh(env.data, now) } as Envelope<T>;
+      const live = await liveOverlay([env.data], now);
+      return { ...env, data: live(refresh(env.data, now)) } as Envelope<T>;
     } catch (e) {
       if (!(e instanceof NotFound)) throw e;
       // Outside the exported channel window: serve the fixture without channels.
