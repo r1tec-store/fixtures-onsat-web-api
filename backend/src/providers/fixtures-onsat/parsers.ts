@@ -38,7 +38,24 @@ function isoUtc(raw: string | null): string | null {
   return Number.isNaN(t) ? null : new Date(t).toISOString();
 }
 
-function parseMatchRow($: CheerioAPI, row: Cheerio<Element>, competition: RawFixture['competition'], round: string | null, warnings: string[]): RawFixture | null {
+/**
+ * A schedule row whose kickoff is not on the list page yet. Finished matches
+ * replace the `data-utc` time with a `.score-vertical` block, so the kickoff
+ * must be read from the match's detail page (`matchDateTime`).
+ */
+export type ScheduleRow = Omit<RawFixture, 'kickoff'> & { kickoff: string | null };
+
+function rowScore(row: Cheerio<Element>): RawFixture['finalScore'] {
+  const n = (sel: string) => {
+    const v = row.find(sel).first().text().trim();
+    return /^\d+$/.test(v) ? Number(v) : null;
+  };
+  const home = n('.score-home');
+  const away = n('.score-away');
+  return home !== null && away !== null ? { home, away } : null;
+}
+
+function parseMatchRow($: CheerioAPI, row: Cheerio<Element>, competition: RawFixture['competition'], round: string | null, warnings: string[]): ScheduleRow | null {
   const lines = row.find('.m-team-line');
   if (lines.length < 2) {
     warnings.push('match-row without two .m-team-line elements');
@@ -48,8 +65,11 @@ function parseMatchRow($: CheerioAPI, row: Cheerio<Element>, competition: RawFix
     const line = lines.eq(i);
     return { name: txt(line.find('span')), logo: attr(line.find('img'), 'src') };
   };
+  const anchor = row.is('a') ? row : row.closest('a');
+  const path = detailPath(anchor.attr('href'));
+  const finalScore = rowScore(row);
   const kickoff = isoUtc(attr(row.find('[data-utc]'), 'data-utc'));
-  if (!kickoff) {
+  if (!kickoff && !(finalScore && path)) {
     warnings.push('match-row without a valid data-utc');
     return null;
   }
@@ -59,7 +79,6 @@ function parseMatchRow($: CheerioAPI, row: Cheerio<Element>, competition: RawFix
     warnings.push('match-row with empty team name');
     return null;
   }
-  const anchor = row.is('a') ? row : row.closest('a');
   const eventId = row.attr('data-espn-id')?.trim();
   return {
     kickoff,
@@ -67,17 +86,29 @@ function parseMatchRow($: CheerioAPI, row: Cheerio<Element>, competition: RawFix
     away,
     competition,
     round,
-    detailPath: detailPath(anchor.attr('href')),
+    detailPath: path,
     mainChannelLogo: attr(row.find('.m-logo-channel img'), 'src'),
     scoreRef: eventId ? { eventId, league: row.attr('data-espn-league')?.trim() || null } : null,
+    finalScore,
   };
 }
 
-/** Daily schedule pages (/p/match1.html ...): league header rows followed by match rows. */
-export function parseSchedulePage(html: string): Parsed<RawFixture[]> {
+function withKickoff(row: ScheduleRow | null, warnings: string[]): RawFixture | null {
+  if (!row) return null;
+  if (row.kickoff) return row as RawFixture;
+  warnings.push('match-row without a valid data-utc');
+  return null;
+}
+
+/**
+ * Daily schedule pages (/p/match1.html ...): league header rows followed by match rows.
+ * Finished matches come back with `kickoff: null` (see ScheduleRow); the provider
+ * resolves them from the detail page.
+ */
+export function parseSchedulePage(html: string): Parsed<ScheduleRow[]> {
   const $ = cheerio.load(html);
   const warnings: string[] = [];
-  const out: RawFixture[] = [];
+  const out: ScheduleRow[] = [];
   let competition: RawFixture['competition'] = null;
   $('.league-row, .match-row').each((_, el) => {
     const node = $(el);
@@ -106,7 +137,10 @@ export function parseCompetitionIndex(html: string): Parsed<Array<{ id: string; 
       category = txt(node) || null;
       return;
     }
-    const id = pageSlug(node.attr('href'));
+    const href = node.attr('href')?.trim();
+    // Cards linked to "#" are placeholders for leagues without a page yet (the app shows them disabled).
+    if (!href || href === '#') return;
+    const id = pageSlug(href);
     const name = txt(node.find('.league-name'));
     if (!id || !name) {
       warnings.push('league-card without slug or name');
@@ -141,14 +175,14 @@ export function parseCompetitionPage(html: string, id: string): Parsed<Omit<RawC
       .find('.match-row')
       .each((__, row) => {
         seen.add(row);
-        const f = parseMatchRow($, $(row), competition, round, warnings);
+        const f = withKickoff(parseMatchRow($, $(row), competition, round, warnings), warnings);
         if (f) fixtures.push(f);
       });
   });
   // Pages without round tabs (cups, groups) still list .match-row elements.
   $('.match-row').each((_, row) => {
     if (seen.has(row)) return;
-    const f = parseMatchRow($, $(row), competition, null, warnings);
+    const f = withKickoff(parseMatchRow($, $(row), competition, null, warnings), warnings);
     if (f) fixtures.push(f);
   });
   if (!name) warnings.push(`competition page ${id} has no title`);

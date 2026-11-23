@@ -11,6 +11,7 @@ import {
   parseSatellitePage,
   parseSchedulePage,
   type Parsed,
+  type ScheduleRow,
 } from './parsers.js';
 
 /**
@@ -49,7 +50,26 @@ export class FixturesOnsatProvider implements FixturesProvider {
     const failed = results.filter((r) => !r.ok);
     if (failed.length === results.length) throw (failed[0] as { error: unknown }).error;
     for (const f of failed) this.report(`/p/${f.item}.html: ${String((f as { error: unknown }).error)}`);
-    return results.flatMap((r) => (r.ok ? r.value : []));
+    const rows = results.flatMap((r) => (r.ok ? r.value : []));
+    return this.resolveKickoffs(rows);
+  }
+
+  /** Detail path -> kickoff, for finished matches whose list row shows the score instead of the time. */
+  private kickoffs = new Map<string, string>();
+
+  private async resolveKickoffs(rows: ScheduleRow[]): Promise<RawFixture[]> {
+    const missing = [...new Set(rows.filter((r) => !r.kickoff && r.detailPath && !this.kickoffs.has(r.detailPath)).map((r) => r.detailPath!))];
+    const results = await mapLimit(missing, config.sourceConcurrency, (p) => this.fetchMatchDetails(p));
+    for (const r of results) {
+      if (r.ok && r.value.kickoff) this.kickoffs.set(r.item, r.value.kickoff);
+      else this.report(`${r.item}: kickoff of finished match unavailable (${r.ok ? 'no matchDateTime' : String(r.error)})`);
+    }
+    const out: RawFixture[] = [];
+    for (const r of rows) {
+      const kickoff = r.kickoff ?? (r.detailPath ? this.kickoffs.get(r.detailPath) : undefined);
+      if (kickoff) out.push({ ...r, kickoff });
+    }
+    return out;
   }
 
   async fetchCompetitions(): Promise<RawCompetition[]> {

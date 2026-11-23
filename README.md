@@ -87,7 +87,7 @@ as plain JSON that any app can read (no filters, no API key):
 |---|---|
 | `/data/meta.json` | export time, counts, recent source issues |
 | `/data/matches.json` | every match (status/score as of the export) |
-| `/data/matches/<id>.json` | match + channels, for kickoffs −3 h … +30 h |
+| `/data/matches/<id>.json` | match + channels, for kickoffs −3 h … +78 h (today + 2 days) |
 | `/data/competitions.json`, `/data/teams.json`, `/data/feeds.json` | catalogs |
 | `/data/satellites.json`, `/data/satellites/<id>.json` | satellites and their channels |
 

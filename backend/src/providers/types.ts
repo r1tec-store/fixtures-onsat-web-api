@@ -17,6 +17,8 @@ export interface RawFixture {
   mainChannelLogo: string | null;
   /** External score-feed reference (league code + event id) when known. */
   scoreRef: { league: string | null; eventId: string } | null;
+  /** Final score printed by the source for finished matches (used when the score feed has none). */
+  finalScore?: { home: number; away: number } | null;
 }
 
 export interface RawCompetition {

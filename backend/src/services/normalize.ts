@@ -7,6 +7,7 @@ import { matchId, teamId } from '../utils/ids.js';
 export interface BaseMatch extends Omit<Match, 'status' | 'status_source' | 'minute' | 'score'> {
   detail_path: string | null;
   score_ref: RawFixture['scoreRef'];
+  final_score: { home: number; away: number } | null;
 }
 
 export function toBaseMatch(f: RawFixture, publicUrl: (p: string) => string): BaseMatch {
@@ -24,6 +25,7 @@ export function toBaseMatch(f: RawFixture, publicUrl: (p: string) => string): Ba
     source_url: f.detailPath ? publicUrl(f.detailPath) : null,
     detail_path: f.detailPath,
     score_ref: f.scoreRef,
+    final_score: f.finalScore ?? null,
   };
 }
 
@@ -55,7 +57,7 @@ const POSTPONED = new Set(['STATUS_POSTPONED', 'STATUS_DELAYED', 'STATUS_SUSPEND
 const CANCELLED = new Set(['STATUS_CANCELED', 'STATUS_CANCELLED', 'STATUS_ABANDONED', 'STATUS_FORFEIT']);
 
 export function applyStatus(m: BaseMatch, live: LiveScore | undefined, now: number, durationMs: number): Match {
-  const { detail_path: _d, score_ref: _s, ...pub } = m;
+  const { detail_path: _d, score_ref: _s, final_score: finalScore, ...pub } = m;
   if (live) {
     let status: MatchStatus;
     if (POSTPONED.has(live.statusName)) status = 'postponed';
@@ -74,6 +76,8 @@ export function applyStatus(m: BaseMatch, live: LiveScore | undefined, now: numb
     };
   }
   const start = Date.parse(m.kickoff);
+  // The source prints the final score once a match is over: trust it over the clock estimate.
+  if (finalScore) return { ...pub, status: 'finished', status_source: 'estimated', minute: null, score: { ...finalScore } };
   const status: MatchStatus = now < start ? 'upcoming' : now < start + durationMs ? 'live' : 'finished';
   return { ...pub, status, status_source: 'estimated', minute: null, score: { home: null, away: null } };
 }

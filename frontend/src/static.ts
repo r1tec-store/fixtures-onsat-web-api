@@ -32,8 +32,14 @@ function load<T>(file: string, _signal?: AbortSignal): Promise<Envelope<T>> {
 
 /** Keep kickoff-estimated statuses current between exports (same rule as the API). */
 function refresh<T extends Match>(m: T, now: number): T {
-  if (m.status_source !== 'estimated') return m;
   const start = Date.parse(m.kickoff);
+  if (m.status_source !== 'estimated' || m.score.home !== null) {
+    // A live-feed status is frozen at export time; exports can be hours apart, so
+    // don't keep showing "live" long after the match must have ended.
+    if ((m.status === 'live' || m.status === 'halftime') && now > start + MATCH_DURATION_MS + 60 * 60_000) return { ...m, status: 'finished', minute: null };
+    if (m.status !== 'upcoming' || now < start) return m;
+    // "upcoming" frozen at export but kickoff has passed: fall back to the clock estimate.
+  }
   return { ...m, status: now < start ? 'upcoming' : now < start + MATCH_DURATION_MS ? 'live' : 'finished' };
 }
 

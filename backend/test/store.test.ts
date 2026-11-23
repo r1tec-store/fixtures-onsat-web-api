@@ -35,3 +35,56 @@ describe('DataStore catalog sync', () => {
     expect(good.status().catalog_synced_at).toBe(syncedAt);
   });
 });
+
+describe('DataStore channel details', () => {
+  it('persists channel lists in the snapshot so a rate-limited run keeps them', async () => {
+    const { mkdtemp } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    config.dataDir = await mkdtemp(path.join(tmpdir(), 'onsat-'));
+    const now = Date.parse('2026-11-23T12:00:00Z');
+    const fixture = {
+      kickoff: '2026-11-24T18:00:00.000Z', // +30 h: inside the widened window
+      home: { name: 'A', logo: null },
+      away: { name: 'B', logo: null },
+      competition: null,
+      round: null,
+      detailPath: '/2026/11/a-vs-b.html',
+      mainChannelLogo: null,
+      scoreRef: null,
+    };
+    const details = { kickoff: fixture.kickoff, competitionName: null, round: null, watchOn: null, commentator: null, channels: [channel] };
+    const p1 = { ...provider([], []), fetchSchedule: async () => [fixture], fetchMatchDetails: async () => details };
+    const first = new DataStore(p1, null, () => now);
+    await first.syncSchedule();
+    const id = first.allMatches()[0]!.id;
+    expect(first.cachedMatchDetails(id)?.channels).toHaveLength(1);
+
+    // Next run (e.g. the next GitHub Actions export): the source answers 429.
+    const limited = Object.assign(new Error('HTTP 429'), { status: 429 });
+    const p2 = { ...p1, fetchMatchDetails: async () => Promise.reject(limited) };
+    const second = new DataStore(p2, null, () => now + 40 * 60_000);
+    await second.loadSnapshot();
+    await second.syncSchedule();
+    expect(second.cachedMatchDetails(id)?.channels).toHaveLength(1);
+    config.dataDir = '';
+  });
+
+  it('shows the source final score for finished matches the score feed misses', async () => {
+    config.dataDir = '';
+    const fx = {
+      kickoff: '2026-11-22T20:45:00.000Z',
+      home: { name: 'T', logo: null },
+      away: { name: 'B', logo: null },
+      competition: null,
+      round: null,
+      detailPath: '/2026/11/t-vs-b.html',
+      mainChannelLogo: null,
+      scoreRef: null,
+      finalScore: { home: 1, away: 3 },
+    };
+    const s = new DataStore({ ...provider([], []), fetchSchedule: async () => [fx] }, null, () => Date.parse('2026-11-22T21:00:00Z'));
+    await s.syncSchedule();
+    expect(s.allMatches()[0]).toMatchObject({ status: 'finished', score: { home: 1, away: 3 } });
+  });
+});

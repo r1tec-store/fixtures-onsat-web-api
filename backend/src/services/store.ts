@@ -26,6 +26,8 @@ interface Snapshot {
   competitions: RawCompetition[];
   satellites: RawSatellite[];
   feeds: Feed[];
+  /** Channel lists per detail page, persisted so a rate-limited run keeps the last good copy. */
+  details?: Record<string, { at: number; value: RawMatchDetails }>;
 }
 
 export interface SyncIssue {
@@ -35,6 +37,12 @@ export interface SyncIssue {
 }
 
 const HOUR = 3600_000;
+
+/**
+ * Kickoffs whose channel lists are prefetched (and exported for GitHub Pages).
+ * The source schedule covers today + 2 days, so the window spans all of it.
+ */
+export const DETAILS_WINDOW = { beforeMs: 3 * HOUR, afterMs: 78 * HOUR };
 
 /** Items whose page failed to load keep the previously synced version (if any). */
 function keepPrevious<T extends { id: string; fetchFailed?: boolean }>(next: T[], prev: T[]): T[] {
@@ -168,6 +176,7 @@ export class DataStore {
       const snap = JSON.parse(await readFile(file, 'utf8')) as Snapshot;
       if (snap.version === 1 && snap.provider === this.provider.name) {
         this.snap = snap;
+        this.details = new Map(Object.entries(snap.details ?? {}));
         this.rebuild();
         logger.info({ file, scheduleSyncedAt: snap.scheduleSyncedAt }, 'snapshot loaded');
       }
@@ -181,6 +190,7 @@ export class DataStore {
     if (!file) return;
     try {
       await mkdir(path.dirname(file), { recursive: true });
+      this.snap.details = this.persistableDetails();
       await writeFile(`${file}.tmp`, JSON.stringify(this.snap));
       await rename(`${file}.tmp`, file);
     } catch (err) {
@@ -245,27 +255,72 @@ export class DataStore {
 
   // ---------- details ----------
 
-  private async prefetchDetails(): Promise<void> {
-    const now = this.now();
-    const todo = [...this.matches.values()].filter((m) => {
-      if (!m.detail_path) return false;
-      const t = Date.parse(m.kickoff);
-      return t > now - 3 * HOUR && t < now + 30 * HOUR;
-    });
-    await mapLimit(todo, config.sourceConcurrency, (m) => this.loadDetails(m.detail_path!, true));
+  private inDetailsWindow(m: BaseMatch, now = this.now()): boolean {
+    if (!m.detail_path) return false;
+    const t = Date.parse(m.kickoff);
+    return t > now - DETAILS_WINDOW.beforeMs && t < now + DETAILS_WINDOW.afterMs;
   }
 
-  private async loadDetails(detailPath: string, force = false): Promise<RawMatchDetails | null> {
+  /** Details worth keeping in the snapshot: pages of matches still in (or just past) the window. */
+  private persistableDetails(): Record<string, { at: number; value: RawMatchDetails }> {
+    const now = this.now();
+    const keep = new Set<string>();
+    for (const m of this.matches.values()) {
+      if (m.detail_path && Date.parse(m.kickoff) > now - 2 * DETAILS_WINDOW.beforeMs) keep.add(m.detail_path);
+    }
+    return Object.fromEntries([...this.details].filter(([p]) => keep.has(p)));
+  }
+
+  private async prefetchDetails(): Promise<void> {
+    const now = this.now();
+    const ttl = config.detailsTtlMin * 60_000;
+    const todo = [...this.matches.values()].filter((m) => {
+      if (!this.inDetailsWindow(m, now)) return false;
+      const hit = this.details.get(m.detail_path!);
+      if (!hit || hit.value.channels.length === 0) return true;
+      // Channel lists change mostly close to kickoff: refresh far-away matches less often.
+      const soon = Date.parse(m.kickoff) - now < 6 * HOUR;
+      return now - hit.at >= (soon ? ttl : 6 * ttl);
+    });
+    // Missing pages first, so a rate limit hits the refreshes, not the gaps.
+    todo.sort((a, b) => Number(this.details.has(a.detail_path!)) - Number(this.details.has(b.detail_path!)) || a.kickoff.localeCompare(b.kickoff));
+    let rateLimited = false;
+    await mapLimit(todo, config.sourceConcurrency, async (m) => {
+      if (rateLimited) return;
+      const ok = await this.loadDetails(m.detail_path!, true, true);
+      if (ok === 'rate-limited') {
+        rateLimited = true;
+        this.issue('warning', 'source rate limit reached; remaining channel lists keep their previous copy until the next sync');
+      }
+    });
+    if (todo.length) await this.saveSnapshot();
+  }
+
+  private async loadDetails(detailPath: string, force?: boolean): Promise<RawMatchDetails | null>;
+  private async loadDetails(detailPath: string, force: boolean, reportRateLimit: true): Promise<RawMatchDetails | null | 'rate-limited'>;
+  private async loadDetails(detailPath: string, force = false, reportRateLimit = false): Promise<RawMatchDetails | null | 'rate-limited'> {
     const hit = this.details.get(detailPath);
     if (hit && !force && this.now() - hit.at < config.detailsTtlMin * 60_000) return hit.value;
     try {
       const value = await this.provider.fetchMatchDetails(detailPath);
+      // A page that suddenly lists no channels is more likely a glitch than a real removal.
+      if (value.channels.length === 0 && hit?.value.channels.length) return hit.value;
       this.details.set(detailPath, { at: this.now(), value });
       return value;
     } catch (err) {
       this.issue('warning', `details ${detailPath} failed: ${String(err)}`);
+      if (reportRateLimit && (err as { status?: number }).status === 429) return 'rate-limited';
       return hit?.value ?? null; // stale beats nothing
     }
+  }
+
+  /** Match + channel list from the cache only (no source request); null when never loaded. */
+  cachedMatchDetails(id: string): MatchDetails | null {
+    const base = this.matches.get(id);
+    const d = base?.detail_path ? this.details.get(base.detail_path)?.value : undefined;
+    const match = this.getMatch(id);
+    if (!match || !d) return null;
+    return { ...match, round: match.round ?? d.round ?? null, watch_on: d.watchOn ?? null, commentator: d.commentator ?? null, channels: d.channels };
   }
 
   // ---------- read API ----------

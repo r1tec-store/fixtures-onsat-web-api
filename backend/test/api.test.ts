@@ -4,7 +4,7 @@ import { createApp } from '../src/app.js';
 import { config } from '../src/config.js';
 import { DataStore } from '../src/services/store.js';
 import { parseCompetitionPage, parseMatchPage, parseSatellitePage, parseSchedulePage } from '../src/providers/fixtures-onsat/parsers.js';
-import type { FixturesProvider, LiveScore, ScoresProvider } from '../src/providers/types.js';
+import type { FixturesProvider, LiveScore, RawFixture, ScoresProvider } from '../src/providers/types.js';
 import * as html from './fixtures/html.js';
 
 const NOW = Date.parse('2026-11-21T13:00:00Z'); // match A live (12:30), match C upcoming (20:00)
@@ -12,7 +12,7 @@ const NOW = Date.parse('2026-11-21T13:00:00Z'); // match A live (12:30), match C
 const provider: FixturesProvider = {
   name: 'test',
   publicUrl: (p) => `https://source.test${p}`,
-  fetchSchedule: async () => parseSchedulePage(html.schedulePage).value,
+  fetchSchedule: async () => parseSchedulePage(html.schedulePage).value.filter((f): f is RawFixture => f.kickoff !== null),
   fetchCompetitions: async () => [{ ...parseCompetitionPage(html.competitionPage, 'england-premier-league').value, category: 'Cat' }],
   fetchSatellites: async () => [{ id: 'nilesat', name: 'Nilesat 7°W', region: 'West', channels: parseSatellitePage(html.satellitePage).value }],
   fetchFeeds: async () => [],

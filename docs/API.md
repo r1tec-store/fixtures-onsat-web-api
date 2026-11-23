@@ -139,7 +139,7 @@ Example: `GET /api/v1/matches/m_90ba1f09595d` (channels trimmed to 2 of 39)
 |---|---|
 | Daily schedule (3 day pages) | `SCHEDULE_REFRESH_MINUTES` (10) |
 | Competitions, satellites, feeds | `CATALOG_REFRESH_MINUTES` (180) |
-| Match channel lists | Prefetched for matches within −3 h…+30 h at each schedule sync. Otherwise loaded on demand, cached `DETAILS_TTL_MINUTES` (30) |
+| Match channel lists | Prefetched for matches within −3 h…+78 h at each schedule sync (persisted in the snapshot). Otherwise loaded on demand, cached `DETAILS_TTL_MINUTES` (30) |
 | Scores | Loaded on request. Cached `LIVE_SCORES_TTL_SECONDS` (30) while any match is near/in play, otherwise `IDLE_SCORES_TTL_SECONDS` (300). Window: kickoff −36 h…+12 h |
 
 If the source is down, the API keeps serving the last snapshot. `last_updated` and `/api/v1/status` show how old it is.
